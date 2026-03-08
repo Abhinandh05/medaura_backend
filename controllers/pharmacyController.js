@@ -16,28 +16,105 @@ const getPharmacyStats = async (req, res, next) => {
       throw new Error('Pharmacy not found for this user');
     }
 
-    const totalMedicines = await Medicine.countDocuments({ pharmacyId: pharmacy._id });
-    const lowStock = await Medicine.countDocuments({ 
-      pharmacyId: pharmacy._id, 
-      stockQuantity: { $lt: 5 } 
-    });
-    
-    // Recent activity (mocked for now based on medicine updates)
-    const recentMedicines = await Medicine.find({ pharmacyId: pharmacy._id })
-      .sort({ updatedAt: -1 })
-      .limit(2);
+    const pharmacyId = pharmacy._id;
 
-    const activity = recentMedicines.map(med => ({
-      text: `You updated "${med.medicineName}" stock.`,
-      time: med.updatedAt
-    }));
+    // Medicine stats
+    const totalMedicines = await Medicine.countDocuments({ pharmacyId });
+    const lowStock = await Medicine.countDocuments({
+      pharmacyId,
+      stockQuantity: { $gt: 0, $lt: 5 }
+    });
+    const outOfStock = await Medicine.countDocuments({
+      pharmacyId,
+      stockQuantity: 0
+    });
+
+    // Order stats
+    const totalOrders = await Order.countDocuments({ pharmacyId });
+    const pendingOrders = await Order.countDocuments({
+      pharmacyId,
+      status: { $in: ['Placed', 'Confirmed', 'Packed'] }
+    });
+    const completedOrders = await Order.countDocuments({
+      pharmacyId,
+      status: 'Delivered'
+    });
+
+    // Today's date range
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayOrders = await Order.countDocuments({
+      pharmacyId,
+      createdAt: { $gte: todayStart, $lte: todayEnd }
+    });
+
+    // Revenue calculations using aggregation
+    const revenueResult = await Order.aggregate([
+      { $match: { pharmacyId: pharmacy._id, status: 'Delivered' } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+    ]);
+    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+
+    const todayRevenueResult = await Order.aggregate([
+      {
+        $match: {
+          pharmacyId: pharmacy._id,
+          status: 'Delivered',
+          createdAt: { $gte: todayStart, $lte: todayEnd }
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+    ]);
+    const todayRevenue = todayRevenueResult.length > 0 ? todayRevenueResult[0].total : 0;
+
+    // Recent orders (last 5)
+    const recentOrders = await Order.find({ pharmacyId })
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    // Activity feed from recent orders + medicine updates
+    const recentMedicines = await Medicine.find({ pharmacyId })
+      .sort({ updatedAt: -1 })
+      .limit(3);
+
+    const activity = [
+      ...recentOrders.slice(0, 3).map(order => ({
+        text: `New order #${order._id.toString().slice(-6).toUpperCase()} — ₹${order.totalAmount}`,
+        time: order.createdAt,
+        type: 'order'
+      })),
+      ...recentMedicines.map(med => ({
+        text: `Stock updated for "${med.medicineName}"`,
+        time: med.updatedAt,
+        type: 'medicine'
+      }))
+    ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 5);
 
     res.status(200).json({
       success: true,
       data: {
         totalMedicines,
         lowStock,
-        dailyViews: Math.floor(Math.random() * 200), // Placeholder for views
+        outOfStock,
+        totalOrders,
+        pendingOrders,
+        completedOrders,
+        todayOrders,
+        totalRevenue,
+        todayRevenue,
+        recentOrders: recentOrders.map(order => ({
+          _id: order._id,
+          customerName: order.userId?.name || 'Unknown',
+          itemCount: order.items.length,
+          totalAmount: order.totalAmount,
+          status: order.status,
+          createdAt: order.createdAt
+        })),
         activity
       }
     });

@@ -8,7 +8,18 @@ const Pharmacy = require('../models/Pharmacy');
  */
 const addMedicine = async (req, res, next) => {
   try {
-    const { pharmacyId } = req.body;
+    let { pharmacyId } = req.body;
+
+    // If pharmacyId is not provided, auto-resolve from the logged-in owner
+    if (!pharmacyId && req.user.role === 'pharmacy_owner') {
+      const ownerPharmacy = await Pharmacy.findOne({ ownerId: req.user.id });
+      if (!ownerPharmacy) {
+        res.status(404);
+        throw new Error('No pharmacy found for your account. Please create a pharmacy first.');
+      }
+      pharmacyId = ownerPharmacy._id;
+      req.body.pharmacyId = pharmacyId;
+    }
 
     // Check if pharmacy exists
     const pharmacy = await Pharmacy.findById(pharmacyId);
@@ -75,10 +86,11 @@ const updateMedicine = async (req, res, next) => {
       throw new Error(`User ${req.user.id} is not authorized to update this medicine`);
     }
 
-    medicine = await Medicine.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
+    // Update fields on the document so pre-save hook runs (updates availabilityStatus)
+    Object.keys(req.body).forEach((key) => {
+      medicine[key] = req.body[key];
     });
+    medicine = await medicine.save();
 
     res.status(200).json({
       success: true,
