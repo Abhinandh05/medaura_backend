@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   addMedicine,
+  getAllMedicines,
   getMedicinesByPharmacy,
   updateMedicine,
   deleteMedicine,
@@ -18,6 +19,7 @@ router.get('/pharmacy/:pharmacyId', getMedicinesByPharmacy);
 
 router
   .route('/')
+  .get(getAllMedicines)
   .post(protect, authorize('pharmacy_owner', 'admin'), addMedicine);
 
 router

@@ -1,12 +1,18 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const { initSocket } = require('./config/socket');
 
 // Initialize Express App
 const app = express();
+const server = http.createServer(app);
+
+// Initialize Socket.io
+initSocket(server);
 
 // Connect to Database
 connectDB();
@@ -30,6 +36,7 @@ app.use('/api/pharmacies', require('./routes/pharmacyRoutes'));
 app.use('/api/medicines', require('./routes/medicineRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/payment', require('./routes/paymentRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 // Error Handling Middleware
 app.use(require('./middleware/errorMiddleware').notFound);
@@ -37,6 +44,6 @@ app.use(require('./middleware/errorMiddleware').errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });

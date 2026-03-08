@@ -8,7 +8,14 @@ const createPaymentIntent = async (req, res) => {
     const { amount } = req.body;
 
     if (!amount) {
+      console.warn('Payment Intent failed: Amount is missing');
       return res.status(400).json({ message: 'Amount is required' });
+    }
+
+    // Stripe requires a minimum amount (approx $0.50). For INR, ₹50 is a safe minimum.
+    if (amount < 50) {
+      console.warn(`Payment Intent failed: Amount ₹${amount} is below minimum ₹50`);
+      return res.status(400).json({ message: 'Minimum order amount for online payment is ₹50.00' });
     }
 
     // Stripe expects amount in the smallest currency unit (e.g., paisa for INR)

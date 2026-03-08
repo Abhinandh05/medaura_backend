@@ -1,6 +1,8 @@
 const Order = require('../models/Order');
 const Medicine = require('../models/Medicine');
 const Pharmacy = require('../models/Pharmacy');
+const Notification = require('../models/Notification');
+const { getIO } = require('../config/socket');
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -20,6 +22,28 @@ exports.createOrder = async (req, res, next) => {
       totalAmount,
       status: 'Placed'
     });
+
+    // Send real-time notification to pharmacy owner
+    try {
+      const pharmacy = await Pharmacy.findById(pharmacyId);
+      if (pharmacy && pharmacy.ownerId) {
+        const notification = await Notification.create({
+          recipientId: pharmacy.ownerId,
+          type: 'new_order',
+          title: 'New Order Received!',
+          message: `Order #${order._id.toString().slice(-6).toUpperCase()} — ${items.length} item(s) worth ₹${totalAmount}`,
+          orderId: order._id,
+        });
+
+        const io = getIO();
+        io.to(`pharmacy_${pharmacy.ownerId.toString()}`).emit('new_order', {
+          notification,
+          order,
+        });
+      }
+    } catch (notifErr) {
+      console.error('Notification error (non-blocking):', notifErr.message);
+    }
 
     res.status(201).json({
       success: true,

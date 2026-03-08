@@ -135,21 +135,73 @@ const deleteMedicine = async (req, res, next) => {
 };
 
 /**
+ * @desc    Get all medicines (with optional pagination & category filter)
+ * @route   GET /api/medicines
+ * @access  Public
+ */
+const getAllMedicines = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const startIndex = (page - 1) * limit;
+
+    const filter = {};
+    if (req.query.category && req.query.category !== 'All') {
+      filter.category = req.query.category;
+    }
+
+    const medicines = await Medicine.find(filter)
+      .populate({
+        path: 'pharmacyId',
+        select: 'pharmacyName address phone location openingHours'
+      })
+      .sort({ createdAt: -1 })
+      .skip(startIndex)
+      .limit(limit);
+
+    const total = await Medicine.countDocuments(filter);
+
+    const formattedResponse = medicines.map(med => ({
+      _id: med._id,
+      medicineName: med.medicineName,
+      category: med.category,
+      pharmacyId: med.pharmacyId ? med.pharmacyId._id : null,
+      pharmacyName: med.pharmacyId ? med.pharmacyId.pharmacyName : 'N/A',
+      pharmacyLocation: med.pharmacyId ? med.pharmacyId.location : null,
+      address: med.pharmacyId ? med.pharmacyId.address : 'N/A',
+      phoneNumber: med.pharmacyId ? med.pharmacyId.phone : 'N/A',
+      availabilityStatus: med.availabilityStatus,
+      stockQuantity: med.stockQuantity,
+      price: med.price,
+      lastUpdated: med.lastUpdated
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: formattedResponse.length,
+      total,
+      page,
+      data: formattedResponse
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Search for a medicine
  * @route   GET /api/medicines/search?name=paracetamol
  * @access  Public
  */
 const searchMedicines = async (req, res, next) => {
   try {
-    const { name } = req.query;
+    const name = req.query.name || req.query.q;
 
     if (!name) {
       res.status(400);
       throw new Error('Please provide a medicine name to search');
     }
 
-    // First, find medicines matching the text search
-    // We populate the pharmacy details as requested
     const medicines = await Medicine.find({
       $text: { $search: name }
     })
@@ -157,13 +209,13 @@ const searchMedicines = async (req, res, next) => {
       path: 'pharmacyId',
       select: 'pharmacyName address phone location openingHours'
     })
-    .sort({ score: { $meta: "textScore" } }); // Sort by best match
+    .sort({ score: { $meta: "textScore" } });
 
-    // Format the response according to requirements
     const formattedResponse = medicines.map(med => ({
       _id: med._id,
       medicineName: med.medicineName,
       category: med.category,
+      pharmacyId: med.pharmacyId ? med.pharmacyId._id : null,
       pharmacyName: med.pharmacyId ? med.pharmacyId.pharmacyName : 'N/A',
       pharmacyLocation: med.pharmacyId ? med.pharmacyId.location : null,
       address: med.pharmacyId ? med.pharmacyId.address : 'N/A',
@@ -207,6 +259,7 @@ const getCategories = async (req, res, next) => {
 
 module.exports = {
   addMedicine,
+  getAllMedicines,
   getMedicinesByPharmacy,
   updateMedicine,
   deleteMedicine,
