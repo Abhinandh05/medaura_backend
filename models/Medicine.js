@@ -6,7 +6,7 @@ const medicineSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please add a medicine name'],
       trim: true,
-      index: true, // We will also create a text index for search
+      index: true, 
     },
     category: {
       type: String,
@@ -47,14 +47,13 @@ const medicineSchema = new mongoose.Schema(
 medicineSchema.index({ medicineName: 'text' });
 
 // Middleware to update availability status based on stock quantity
-medicineSchema.pre('save', function (next) {
+medicineSchema.pre('save', async function () {
   if (this.stockQuantity === 0) {
     this.availabilityStatus = 'Out of Stock';
   } else {
     this.availabilityStatus = 'Available';
   }
   this.lastUpdated = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('Medicine', medicineSchema);

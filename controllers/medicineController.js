@@ -42,6 +42,7 @@ const addMedicine = async (req, res, next) => {
       data: medicine
     });
   } catch (error) {
+    console.error('Error in addMedicine:', error);
     next(error);
   }
 };

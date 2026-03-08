@@ -45,11 +45,10 @@ const pharmacySchema = new mongoose.Schema(
   }
 );
 
-// We could add cascading delete for medicines when a pharmacy is deleted
-pharmacySchema.pre('deleteOne', { document: true, query: false }, async function (next) {
+// we could add cascading delete for medicines when a pharmacy is deleted
+pharmacySchema.pre('deleteOne', { document: true, query: false }, async function () {
   console.log(`Medicines being removed from pharmacy ${this._id}`);
   await this.model('Medicine').deleteMany({ pharmacyId: this._id });
-  next();
 });
 
 module.exports = mongoose.model('Pharmacy', pharmacySchema);
